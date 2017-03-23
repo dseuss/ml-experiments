@@ -38,19 +38,20 @@ class Gridworld(object):
 
         self.reset()
 
-    def reset(self, position=None):
-        position = position if position is not None \
+    def reset(self, agent_pos=None):
+        agent_pos = agent_pos if agent_pos is not None \
             else np.array(self._gridsize) // 2
-        self._agent_pos = np.array(position)
+        self._state = self._pos_to_state(agent_pos)
 
     def render(self, ax=None):
         ax = pl.gca() if ax is None else ax
         _render_grid(self._gridsize, ax=ax)
-        boxes = [(self._goal, GOAL_STYLE), (self._agent_pos, AGENT_STYLE)]
+        agent_position = self._state_to_pos(self._state)
+        boxes = [(self._goal, GOAL_STYLE), (agent_position, AGENT_STYLE)]
         _render_boxes(boxes, ax=ax)
 
     @cached_property
-    def stp_matrix(self):
+    def stprobs(self):
         stp_left = np.zeros(tuple(self._gridsize) * 2)
         for x, y in product(range(1, self._gridsize[0]), range(self._gridsize[1])):
             stp_left[x - 1, y, x, y] = 1
@@ -71,16 +72,53 @@ class Gridworld(object):
             stp_down[x, y - 1, x, y] = 1
         stp_down[:, 0, :, 0] = np.eye(self._gridsize[0])
 
-        return {'up': stp_up, 'down': stp_down,
+        stps = {'up': stp_up, 'down': stp_down,
                 'left': stp_left, 'right': stp_right}
+
+        # encoding the final state
+        goal_x, goal_y = self._goal
+        for stp in stps.values():
+            stp[:, :, goal_x, goal_y] = 0.
+            stp[goal_x, goal_y, goal_x, goal_y] = 1.0
+        return {action: stp.reshape((self.nr_states,) * 2)
+                for action, stp in stps.items()}
+
+    @cached_property
+    def rewards(self):
+        reward = -np.ones(self.nr_states)
+        target_state = self._pos_to_state(self._goal)
+        reward[target_state] = 0
+        return reward
 
     @property
     def state(self):
-        return self._agent_pos[0] * self._gridsize[1] + self._agent_pos[1]
+        return self._state
 
     @property
     def nr_states(self):
         return np.prod(self._gridsize)
+
+    def _state_to_pos(self, state):
+        """@todo: Docstring for _state_to_pos.
+
+        :param state: @todo
+        :returns: @todo
+
+        """
+        assert 0 <= state < self.nr_states
+        return state // self._gridsize[1], state % self._gridsize[1]
+
+    def _pos_to_state(self, position):
+        """@todo: Docstring for _pos_to_state.
+
+        :param position: @todo
+        :returns: @todo
+
+        """
+        assert 0 <= position[0] < self._gridsize[0]
+        assert 0 <= position[1] < self._gridsize[1]
+
+        return position[0] * self._gridsize[1] + position[1]
 
     def step(self, action):
         """@todo: Docstring for .
@@ -89,10 +127,10 @@ class Gridworld(object):
         :returns: @todo
 
         """
-        stp = self.stp_matrix[action].reshape((self.nr_states,) * 2)
+        stp = self.stprobs[action]
         new_state = np.random.choice(self.nr_states, p=stp[:, self.state])
-        self._agent_pos = (new_state // self._gridsize[1],
-                           new_state % self._gridsize[1])
+        self._state = new_state
+        return self.rewards[new_state]
 
 
 if __name__ == '__main__':
@@ -101,7 +139,7 @@ if __name__ == '__main__':
     world = Gridworld((10, 5))
 
     def keypress_event(event):
-        if event.key in world.stp_matrix.keys():
+        if event.key in world.stprobs.keys():
             result = world.step(event.key)
             print(result)
             stdout.flush()
