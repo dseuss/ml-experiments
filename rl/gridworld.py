@@ -81,15 +81,21 @@ class Gridworld(object):
         for stp in stps.values():
             stp[:, :, goal_x, goal_y] = 0.
             stp[goal_x, goal_y, goal_x, goal_y] = 1.0
+
         return {action: stp.reshape((self.nr_states,) * 2)
                 for action, stp in stps.items()}
 
     @cached_property
-    def rewards(self):
-        reward = -np.ones(self.nr_states)
+    def state_reward(self):
+        state_reward = -np.ones(self.nr_states)
         target_state = self._pos_to_state(self._goal)
-        reward[target_state] = 0
-        return reward
+        state_reward[target_state] = 0
+        return state_reward
+
+    @cached_property
+    def rewards(self):
+        return {action: self.state_reward @ stp
+                for action, stp in self.stprobs.items()}
 
     @property
     def state(self):
@@ -106,8 +112,13 @@ class Gridworld(object):
         :returns: @todo
 
         """
-        assert 0 <= state < self.nr_states
+        if not(0 <= state < self.nr_states):
+            raise ValueError()
         return state // self._gridsize[1], state % self._gridsize[1]
+
+    @property
+    def gridsize(self):
+        return self._gridsize
 
     def _pos_to_state(self, position):
         """@todo: Docstring for _pos_to_state.
@@ -116,8 +127,9 @@ class Gridworld(object):
         :returns: @todo
 
         """
-        assert 0 <= position[0] < self._gridsize[0]
-        assert 0 <= position[1] < self._gridsize[1]
+        if not(0 <= position[0] < self._gridsize[0]) \
+                and (0 <= position[1] < self._gridsize[1]):
+            raise ValueError()
 
         return position[0] * self._gridsize[1] + position[1]
 
@@ -131,7 +143,7 @@ class Gridworld(object):
         stp = self.stprobs[action]
         new_state = np.random.choice(self.nr_states, p=stp[:, self.state])
         self._state = new_state
-        return self.rewards[new_state]
+        return self.state_reward[new_state]
 
 
 def launch_interactive(world):
@@ -143,8 +155,9 @@ def launch_interactive(world):
     """
     def keypress_event(event):
         if event.key in world.stprobs.keys():
-            result = world.step(event.key)
-            print(result)
+            expected_reward = world.rewards[event.key][world.state]
+            recieved_reward = world.step(event.key)
+            print(expected_reward, recieved_reward)
             stdout.flush()
             ax.clear()
             world.render(ax)
@@ -155,6 +168,8 @@ def launch_interactive(world):
     fig.canvas.mpl_connect('key_press_event', keypress_event)
     world.render()
     pl.show()
+
+
 if __name__ == '__main__':
     world = Gridworld((10, 5))
     launch_interactive(world)
