@@ -1,12 +1,13 @@
 # coding: utf-8
 
 
-import numpy as np
-import matplotlib.pyplot as pl
-from matplotlib.patches import Rectangle
-from cached_property import cached_property
 from itertools import product
+from sys import stdout
 
+import matplotlib.pyplot as pl
+import numpy as np
+from cached_property import cached_property
+from matplotlib.patches import Rectangle
 
 GOAL_STYLE = {'facecolor': 'green', 'alpha': .5}
 AGENT_STYLE = {'facecolor': 'blue', 'alpha': 1}
@@ -133,11 +134,13 @@ class Gridworld(object):
         return self.rewards[new_state]
 
 
-if __name__ == '__main__':
-    from sys import stdout
+def launch_interactive(world):
+    """@todo: Docstring for launch_interactive.
 
-    world = Gridworld((10, 5))
+    :param world: @todo
+    :returns: @todo
 
+    """
     def keypress_event(event):
         if event.key in world.stprobs.keys():
             result = world.step(event.key)
@@ -152,3 +155,6 @@ if __name__ == '__main__':
     fig.canvas.mpl_connect('key_press_event', keypress_event)
     world.render()
     pl.show()
+if __name__ == '__main__':
+    world = Gridworld((10, 5))
+    launch_interactive(world)
