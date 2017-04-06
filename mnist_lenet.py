@@ -8,8 +8,7 @@ from keras.datasets import mnist
 from keras.optimizers import Adam
 from models import lenet
 
-keras.backend.set_image_dim_ordering('th')
-
+keras.backend.set_image_data_format('channels_first')
 
 NUM_CLASSES = 10
 
@@ -19,6 +18,7 @@ x_test = (x_test / 255).astype('float32')
 y_train = keras.utils.np_utils.to_categorical(y_train, NUM_CLASSES)
 y_test = keras.utils.np_utils.to_categorical(y_test, NUM_CLASSES)
 
+print(x_train.shape[1:])
 model = lenet.generate(x_train.shape[1:], NUM_CLASSES)
 optimizier = Adam()
 model.compile(loss='categorical_crossentropy', optimizer=optimizier,
