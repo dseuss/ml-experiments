@@ -18,14 +18,13 @@ x_test = (x_test / 255).astype('float32')
 y_train = keras.utils.np_utils.to_categorical(y_train, NUM_CLASSES)
 y_test = keras.utils.np_utils.to_categorical(y_test, NUM_CLASSES)
 
-print(x_train.shape[1:])
 model = lenet.generate(x_train.shape[1:], NUM_CLASSES)
 optimizier = Adam()
 model.compile(loss='categorical_crossentropy', optimizer=optimizier,
               metrics=['accuracy'])
 
 for super_epoch in range(20):
-    model.fit(x_train[:, None, :, :], y_train, batch_size=128, nb_epoch=10,
+    model.fit(x_train[:, None, :, :], y_train, batch_size=128, epochs=10,
               verbose=1, validation_data=(x_test[:, None, :, :], y_test))
 
     with h5py.File('lenet.h5', 'a') as output:
