@@ -27,6 +27,7 @@ def generate(figsize, nr_classes, cunits=[20, 50], fcunits=[500]):
         model.add(Dense(nr_units, activation='relu'))
 
     # Output layer
-    model.add(Dense(nr_classes, activation='softmax'))
+    activation = 'softmax' if nr_classes > 1 else 'sigmoid'
+    model.add(Dense(nr_classes, activation=activation))
 
     return model
