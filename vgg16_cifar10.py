@@ -38,6 +38,7 @@ img_input = Input(shape=(32, 32, 3))
 
 base_model = VGG16(include_top=False, weights='imagenet',
                    input_shape=x_train.shape[1:])
+
 x = base_model.get_layer('block3_pool').output
 x = Flatten(name='flatten')(x)
 x = Dense(256, name='fc1', activation='relu')(x)
@@ -47,7 +48,22 @@ x = Dropout(0.5)(x)
 prediction = Dense(1, activation='sigmoid')(x)
 model = Model(inputs=base_model.inputs, outputs=prediction)
 
+# set the convolutional layers untrainable for now
+for layer in base_model.layers:
+    layer.trainable = False
+
 optimizer = Adam(lr=1e-3, decay=0.01)
+model.compile(loss='binary_crossentropy', optimizer=optimizer,
+              metrics=['accuracy'])
+model.fit_generator(imggen.flow(x_train, y_train, batch_size=64),
+                    validation_data=(x_test, y_test),
+                    steps_per_epoch=100, epochs=50, verbose=True)
+
+# and now train the full network
+for layer in model.layers:
+    layer.trainable = True
+
+optimizer = Adam(lr=1e-4, decay=0.01)
 model.compile(loss='binary_crossentropy', optimizer=optimizer,
               metrics=['accuracy'])
 save_callback = ModelCheckpoint(TARGETFILE, monitor='val_loss',
@@ -55,4 +71,4 @@ save_callback = ModelCheckpoint(TARGETFILE, monitor='val_loss',
 model.fit_generator(imggen.flow(x_train, y_train, batch_size=64),
                     validation_data=(x_test, y_test),
                     steps_per_epoch=100, epochs=10000, verbose=True,
-                    validation_steps=256, callbacks=[save_callback])
+                    validation_steps=1000, callbacks=[save_callback])
