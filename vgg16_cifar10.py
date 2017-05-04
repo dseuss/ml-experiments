@@ -1,13 +1,12 @@
 import numpy as np
 from keras import backend
-from keras.applications.vgg16 import VGG16, preprocess_input, WEIGHTS_PATH_NO_TOP
-from keras.callbacks import ModelCheckpoint
+from keras.applications.vgg16 import preprocess_input
+from keras.callbacks import ModelCheckpoint, TensorBoard
 from keras.datasets import cifar10
-from keras.layers import Dense, Dropout, Flatten, Input, Conv2D, MaxPooling2D
+from keras.layers import Dense, Dropout, Flatten
 from keras.models import Model
 from keras.optimizers import Adam
 from keras.preprocessing.image import ImageDataGenerator
-from keras.utils.data_utils import get_file
 
 from models.vgg16_modified import VGG16
 
@@ -34,7 +33,6 @@ imggen = ImageDataGenerator(rotation_range=20,
                             zoom_range=0.3,
                             channel_shift_range=0.1)
 imggen.fit(x_train)
-img_input = Input(shape=(32, 32, 3))
 
 base_model = VGG16(include_top=False, weights='imagenet',
                    input_shape=x_train.shape[1:])
@@ -68,7 +66,9 @@ model.compile(loss='binary_crossentropy', optimizer=optimizer,
               metrics=['accuracy'])
 save_callback = ModelCheckpoint(TARGETFILE, monitor='val_loss',
                                 verbose=True, mode='auto', period=1)
+tb_callback = TensorBoard(histogram_freq=5, write_images=True)
 model.fit_generator(imggen.flow(x_train, y_train, batch_size=64),
                     validation_data=(x_test, y_test),
                     steps_per_epoch=100, epochs=10000, verbose=True,
-                    validation_steps=1000, callbacks=[save_callback])
+                    validation_steps=1000,
+                    callbacks=[save_callback, tb_callback])
