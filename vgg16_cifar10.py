@@ -1,7 +1,7 @@
 import numpy as np
 from keras import backend
 from keras.applications.vgg16 import preprocess_input
-from keras.callbacks import ModelCheckpoint, TensorBoard
+from keras.callbacks import ModelCheckpoint, TensorBoard, ReduceLROnPlateau
 from keras.datasets import cifar10
 from keras.layers import Dense, Dropout, Flatten
 from keras.models import Model
@@ -29,6 +29,7 @@ imggen = ImageDataGenerator(rotation_range=20,
                             height_shift_range=0.15,
                             shear_range=0.2,
                             fill_mode='constant',
+                            horizontal_flip=True,
                             cval=0.,
                             zoom_range=0.3,
                             channel_shift_range=0.1)
@@ -46,29 +47,31 @@ x = Dropout(0.5)(x)
 prediction = Dense(1, activation='sigmoid')(x)
 model = Model(inputs=base_model.inputs, outputs=prediction)
 
-# set the convolutional layers untrainable for now
-for layer in base_model.layers:
-    layer.trainable = False
+# Roughly learn fc weights
+for layer in model.layers:
+    if 'conv' in layer.name:
+        print("Setting {} to untrainable".format(layer.name))
+        layer.trainable = False
 
-optimizer = Adam(lr=1e-3, decay=0.01)
+optimizer = Adam()
 model.compile(loss='binary_crossentropy', optimizer=optimizer,
               metrics=['accuracy'])
-model.fit_generator(imggen.flow(x_train, y_train, batch_size=64),
+model.fit_generator(imggen.flow(x_train, y_train, batch_size=32),
                     validation_data=(x_test, y_test),
-                    steps_per_epoch=100, epochs=50, verbose=True)
+                    steps_per_epoch=100, epochs=100, verbose=True)
 
-# and now train the full network
-for layer in model.layers:
+# finetune all weights
+for layers in model.layers:
     layer.trainable = True
 
-optimizer = Adam(lr=1e-4, decay=0.01)
+optimizer = Adam(lr=1e-4)
 model.compile(loss='binary_crossentropy', optimizer=optimizer,
               metrics=['accuracy'])
 save_callback = ModelCheckpoint(TARGETFILE, monitor='val_loss',
                                 verbose=True, mode='auto', period=1)
 tb_callback = TensorBoard(histogram_freq=5, write_images=True)
-model.fit_generator(imggen.flow(x_train, y_train, batch_size=64),
+lr_callback = ReduceLROnPlateau(factor=0.1, verbose=True, cooldown=5)
+model.fit_generator(imggen.flow(x_train, y_train, batch_size=32),
                     validation_data=(x_test, y_test),
                     steps_per_epoch=100, epochs=10000, verbose=True,
-                    validation_steps=1000,
-                    callbacks=[save_callback, tb_callback])
+                    callbacks=[save_callback, tb_callback, lr_callback])
