@@ -12,8 +12,14 @@ def preprocess(x, y):
     sel = np.ravel((y == 3) + (y == 5))
     x, y = x[sel].astype(np.double), y[sel]
     x = x / 255.
-    y = (y == 3).astype(np.uint8).ravel()
+    y = (y == 3).astype(np.int).ravel()
     return x, y
+
+def load_data():
+    (x_train, y_train), (x_test, y_test) = cifar10.load_data()
+    x_train, y_train = preprocess(x_train, y_train)
+    x_test, y_test = preprocess(x_test, y_test)
+    return (x_train, y_train), (x_test, y_test)
 
 
 def generate_model(img_shape=(32, 32, 3)):
@@ -44,28 +50,27 @@ def generate_model(img_shape=(32, 32, 3)):
 
     return model
 
-(x_train, y_train), (x_test, y_test) = cifar10.load_data()
-x_train, y_train = preprocess(x_train, y_train)
-x_test, y_test = preprocess(x_test, y_test)
 
-backend.set_image_data_format('channels_last')
-model = generate_model()
-model.compile(loss='binary_crossentropy', optimizer='adam',
-              metric=['accuracy'])
-model.summary()
+if __name__ == '__main__':
+    (x_train, y_train), (x_test, y_test)  = load_data()
+    backend.set_image_data_format('channels_last')
+    model = generate_model()
+    model.compile(loss='binary_crossentropy', optimizer='adam',
+                metrics=['accuracy'])
+    model.summary()
 
-save_callback = ModelCheckpoint('cifar10.h5', verbose=1, period=10)
-tb_callback = TensorBoard()
-lr_callback = ReduceLROnPlateau(factor=0.1, verbose=1, cooldown=5)
+    save_callback = ModelCheckpoint('cifar10.h5', verbose=1, period=10)
+    tb_callback = TensorBoard()
+    lr_callback = ReduceLROnPlateau(factor=0.1, verbose=1, cooldown=5)
 
-train_datagen = ImageDataGenerator(
-    shear_range=0.2,
-    zoom_range=0.2,
-    horizontal_flip=True)
-train_datagen.fit(x_train)
+    train_datagen = ImageDataGenerator(
+        shear_range=0.2,
+        zoom_range=0.2,
+        horizontal_flip=True)
+    train_datagen.fit(x_train)
 
-model.fit_generator(train_datagen.flow(x_train, y_train, batch_size=64),
-                    validation_data=(x_test, y_test),
-                    verbose=1, epochs=1000, steps_per_epoch=100,
-                    callbacks=[save_callback, tb_callback, lr_callback]
-                    )
+    model.fit_generator(train_datagen.flow(x_train, y_train, batch_size=64),
+                        validation_data=(x_test, y_test),
+                        verbose=1, epochs=1000, steps_per_epoch=256,
+                        callbacks=[save_callback, tb_callback, lr_callback]
+                        )
