@@ -97,7 +97,7 @@ if __name__ == '__main__':
 
     save_callback = ModelCheckpoint('cifar10.h5', verbose=1, period=10)
     tb_callback = TensorBoard()
-    lr_callback = ReduceLROnPlateau(factor=0.1, verbose=1, cooldown=5)
+    lr_callback = ReduceLROnPlateau(factor=0.05, verbose=1, cooldown=5)
 
     train_datagen = ImageDataGenerator(
         shear_range=0.2,
