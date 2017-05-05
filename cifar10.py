@@ -5,9 +5,11 @@ from keras import backend
 from keras.callbacks import ModelCheckpoint, ReduceLROnPlateau, TensorBoard
 from keras.datasets import cifar10
 from keras.layers import Conv2D, Dense, Dropout, Flatten, MaxPooling2D
-from keras.models import Sequential, Model
+from keras.models import Model, Sequential
+from keras.optimizers import Adam
 from keras.preprocessing.image import ImageDataGenerator
 from models import vgg_notop
+
 
 def preprocess(x, y):
     sel = np.ravel((y == 3) + (y == 5))
@@ -55,9 +57,9 @@ def generate_vgg_reduced(img_shape=(32, 32, 3)):
 
     model.add(Flatten(name='flatten'))
 
-    model.add(Dense(1024, activation='relu', name='fc1'))
+    model.add(Dense(512, activation='relu', name='fc1'))
     model.add(Dropout(0.5))
-    model.add(Dense(1024, activation='relu', name='fc2'))
+    model.add(Dense(512, activation='relu', name='fc2'))
     model.add(Dropout(0.5))
     model.add(Dense(1, activation='sigmoid'))
 
@@ -70,10 +72,10 @@ def generate_vgg16_transfer(img_shape=(32, 32, 3)):
     x = base_model.get_layer('block3_pool').output
     x = Flatten(name='flatten')(x)
 
-    x = Dense(1024, activation='relu', name='fc1')(x)
+    x = Dense(512, activation='relu', name='fc1')(x)
     x = Dropout(0.5)(x)
 
-    x = Dense(1024, activation='relu', name='fc2')(x)
+    x = Dense(512, activation='relu', name='fc2')(x)
     x = Dropout(0.5)(x)
 
     prediction = Dense(1, activation='sigmoid')(x)
@@ -81,21 +83,16 @@ def generate_vgg16_transfer(img_shape=(32, 32, 3)):
     return model
 
 
-MODELS = {
-    'reduced': generate_vgg_reduced,
-    'transfer': generate_vgg16_transfer
-}
-
-if __name__ == '__main__':
+def train_reduced():
     (x_train, y_train), (x_test, y_test) = load_data()
     backend.set_image_data_format('channels_last')
 
-    model = MODELS.get(sys.argv[1])()
-    model.compile(loss='binary_crossentropy', optimizer='SGD',
+    model = generate_vgg_reduced()
+    model.compile(loss='binary_crossentropy', optimizer='adam',
                   metrics=['accuracy'])
     model.summary()
 
-    save_callback = ModelCheckpoint('cifar10.h5', verbose=1, period=10)
+    save_callback = ModelCheckpoint('cifar10_reduced.h5', verbose=1, period=10)
     tb_callback = TensorBoard()
     lr_callback = ReduceLROnPlateau(factor=0.05, verbose=1, cooldown=5)
 
@@ -109,3 +106,52 @@ if __name__ == '__main__':
                         verbose=1, epochs=1000, steps_per_epoch=256,
                         callbacks=[save_callback, tb_callback, lr_callback]
                         )
+
+
+def train_transfer():
+    (x_train, y_train), (x_test, y_test) = load_data()
+    backend.set_image_data_format('channels_last')
+    train_datagen = ImageDataGenerator(
+        shear_range=0.2,
+        zoom_range=0.2,
+        horizontal_flip=True)
+
+    model = generate_vgg16_transfer()
+
+    save_callback = ModelCheckpoint('cifar10_transfer.h5', verbose=1, period=10)
+    tb_callback = TensorBoard()
+    lr_callback = ReduceLROnPlateau(factor=0.05, verbose=1, cooldown=5)
+
+    for layer in model.layers:
+        if 'conv' in layer.name:
+            print("Setting %s to untrainable" % layer.name)
+            layer.trainable = False
+    model.compile(loss='binary_crossentropy', optimizer='adam',
+                  metrics=['accuracy'])
+    model.summary()
+    model.fit_generator(train_datagen.flow(x_train, y_train, batch_size=64),
+                        validation_data=(x_test, y_test),
+                        verbose=1, epochs=50, steps_per_epoch=256,
+                        )
+    model.save_weights('cifar10_transfer_pretrain.h5')
+
+    for layer in model.layers:
+        layer.trainable = True
+    model.compile(loss='binary_crossentropy', metrics=['accuracy'],
+                  optimizer=Adam(lr=0.0001))
+    model.summary()
+    model.load_weights('cifar10_transfer_pretrain.h5')
+
+    model.fit_generator(train_datagen.flow(x_train, y_train, batch_size=64),
+                        validation_data=(x_test, y_test),
+                        verbose=1, epochs=1000, steps_per_epoch=256,
+                        callbacks=[save_callback, tb_callback, lr_callback]
+                        )
+
+MODELS = {
+    'reduced': train_reduced,
+    'transfer': train_transfer
+}
+
+if __name__ == '__main__':
+    MODELS.get(sys.argv[1])()
