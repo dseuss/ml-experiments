@@ -103,7 +103,7 @@ def train_reduced():
 
     model.fit_generator(train_datagen.flow(x_train, y_train, batch_size=64),
                         validation_data=(x_test, y_test),
-                        verbose=1, epochs=1000, steps_per_epoch=256,
+                        verbose=1, epochs=200, steps_per_epoch=256,
                         callbacks=[save_callback, tb_callback, lr_callback]
                         )
 
@@ -144,7 +144,7 @@ def train_transfer():
 
     model.fit_generator(train_datagen.flow(x_train, y_train, batch_size=64),
                         validation_data=(x_test, y_test),
-                        verbose=1, epochs=1000, steps_per_epoch=256,
+                        verbose=1, epochs=150, steps_per_epoch=256,
                         callbacks=[save_callback, tb_callback, lr_callback]
                         )
 
