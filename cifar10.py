@@ -1,19 +1,31 @@
+import sys
+
 import numpy as np
 from keras import backend
 from keras.callbacks import ModelCheckpoint, ReduceLROnPlateau, TensorBoard
 from keras.datasets import cifar10
-from keras.layers import Dense, Dropout, Flatten, Conv2D, MaxPooling2D, Input
-from keras.models import Sequential
-from keras.optimizers import Adam
+from keras.layers import Conv2D, Dense, Dropout, Flatten, MaxPooling2D
+from keras.models import Sequential, Model
 from keras.preprocessing.image import ImageDataGenerator
-
+from models import vgg_notop
 
 def preprocess(x, y):
     sel = np.ravel((y == 3) + (y == 5))
     x, y = x[sel].astype(np.double), y[sel]
-    x = x / 255.
+
+    # normalize to zero-mean pixels
+    pixel_means = np.mean(x, axis=(0, 1, 2), keepdims=True)
+    x -= pixel_means
+
+    # RGB -> BGR
+    x = x[..., ::-1]
+
+    if backend.image_data_format == 'channels_first':
+        x = np.transpose(x, (0, 3, 1, 2))
+
     y = (y == 3).astype(np.int).ravel()
     return x, y
+
 
 def load_data():
     (x_train, y_train), (x_test, y_test) = cifar10.load_data()
@@ -22,7 +34,8 @@ def load_data():
     return (x_train, y_train), (x_test, y_test)
 
 
-def generate_model(img_shape=(32, 32, 3)):
+def generate_vgg_reduced(img_shape=(32, 32, 3)):
+    print("Generating new VGG-style model")
     conv_params=dict(activation='relu', padding='same')
     model = Sequential()
 
@@ -51,12 +64,35 @@ def generate_model(img_shape=(32, 32, 3)):
     return model
 
 
+def generate_vgg16_transfer(img_shape=(32, 32, 3)):
+    print("Using imagenet pretrained VGG16 model")
+    base_model = vgg_notop.VGG16(weights='imagenet', input_shape=img_shape)
+    x = base_model.get_layer('block3_pool').output
+    x = Flatten(name='flatten')(x)
+
+    x = Dense(1024, activation='relu', name='fc1')(x)
+    x = Dropout(0.5)(x)
+
+    x = Dense(1024, activation='relu', name='fc2')(x)
+    x = Dropout(0.5)(x)
+
+    prediction = Dense(1, activation='sigmoid')(x)
+    model = Model(inputs=base_model.inputs, outputs=prediction)
+    return model
+
+
+MODELS = {
+    'reduced': generate_vgg_reduced,
+    'transfer': generate_vgg16_transfer
+}
+
 if __name__ == '__main__':
-    (x_train, y_train), (x_test, y_test)  = load_data()
+    (x_train, y_train), (x_test, y_test) = load_data()
     backend.set_image_data_format('channels_last')
-    model = generate_model()
-    model.compile(loss='binary_crossentropy', optimizer='adam',
-                metrics=['accuracy'])
+
+    model = MODELS.get(sys.argv[1])()
+    model.compile(loss='binary_crossentropy', optimizer='SGD',
+                  metrics=['accuracy'])
     model.summary()
 
     save_callback = ModelCheckpoint('cifar10.h5', verbose=1, period=10)
@@ -67,7 +103,6 @@ if __name__ == '__main__':
         shear_range=0.2,
         zoom_range=0.2,
         horizontal_flip=True)
-    train_datagen.fit(x_train)
 
     model.fit_generator(train_datagen.flow(x_train, y_train, batch_size=64),
                         validation_data=(x_test, y_test),
