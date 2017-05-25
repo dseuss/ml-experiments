@@ -85,19 +85,52 @@ class SupervisedModel(object):
         feed_dict = {self['input']: x, self['reference']: y}
         return self.session.run(self['loss'], feed_dict=feed_dict)
 
+    def _setup_progressbar(self, epochs, metrics, validation=False):
+        widgets = [pb.SimpleProgress(), '    ']
+        for metric in metrics:
+            widgets += [pb.DynamicMessage(metric), '   ']
+
+        if validation:
+            for metric in metrics:
+                widgets += [pb.DynamicMessage('val_' + metric), '   ']
+
+        progress = pb.ProgressBar(max_value=epochs, widgets=widgets,
+                                  term_with=60)
+        return progress
+
     @_check_init
-    def train(self, x, y, epochs=1, batch_size=None):
-        progress = pb.ProgressBar(max_value=epochs)
+    def train(self, x, y, epochs=1, batch_size=None, metrics=['loss'],
+              validation_data=None):
         indices = np.arange(len(x))
         batch_size = batch_size if batch_size is not None else len(x)
         np.random.shuffle(indices)
+        nr_chucks = len(list(chunks(indices, batch_size)))
+        val_ops = [self[key] for key in metrics]
+
+        if validation_data is not None:
+            x_test, y_test = validation_data
+            with_validation = True
+        else:
+            with_validation = False
 
         for epoch in range(epochs):
-            for batch_idx in chunks(indices, batch_size):
+            progress = self._setup_progressbar(nr_chucks, metrics,
+                                               validation=with_validation)
+
+            for batch_nr, batch_idx in enumerate(chunks(indices, batch_size)):
                 feed_dict = {self['input']: x[batch_idx],
                              self['reference']: y[batch_idx]}
-                _, loss = self.session.run([self['optimization'], self['loss']],
-                                        feed_dict=feed_dict)
-            progress.update(epoch)
+                _, *metric = self.session.run([self['optimization']] + val_ops,
+                                              feed_dict=feed_dict)
+                for key, value in zip(metrics, metric):
+                    progress.dynamic_messages[key] = value
+                progress.update(batch_nr)
 
-        progress.finish()
+            if with_validation:
+                feed_dict = {self['input']: x_test,
+                                self['reference']: y_test}
+                metric = self.session.run(val_ops, feed_dict=feed_dict)
+                for key, value in zip(metrics, metric):
+                    progress.dynamic_messages['val_' + key] = value
+
+            progress.finish()
