@@ -2,9 +2,10 @@ from abc import abstractmethod
 
 import progressbar as pb
 import tensorflow as tf
+import numpy as np
 
 
-## DECORATORS
+# DECORATORS
 def _check_init(method):
     def check(self, *args, **kwargs):
         if not self.is_init:
@@ -13,7 +14,13 @@ def _check_init(method):
     return check
 
 
-## CLASSES
+def chunks(array, n):
+    """Returns an iterator over successive chunks of `array` of size `n`"""
+    for i in range(0, len(array), n):
+        yield array[i:i + n]
+
+
+# CLASSES
 class SupervisedModel(object):
     """Docstring for SupervisedModel. """
 
@@ -75,13 +82,18 @@ class SupervisedModel(object):
         return self.sess.run(self['loss'], feed_dict=feed_dict)
 
     @_check_init
-    def train(self, x, y, epochs=1):
+    def train(self, x, y, epochs=1, batch_size=None):
         progress = pb.ProgressBar(max_value=epochs)
+        indices = np.arange(len(x))
+        batch_size = batch_size if batch_size is not None else len(x)
+        np.random.shuffle(indices)
 
         for epoch in range(epochs):
-            feed_dict = {self['input']: x, self['reference']: y}
-            _, loss = self.sess.run([self['optimization'], self['loss']],
-                                    feed_dict=feed_dict)
+            for batch_idx in chunks(indices, batch_size):
+                feed_dict = {self['input']: x[batch_idx],
+                             self['reference']: y[batch_idx]}
+                _, loss = self.sess.run([self['optimization'], self['loss']],
+                                        feed_dict=feed_dict)
             progress.update(epoch)
 
         progress.finish()
