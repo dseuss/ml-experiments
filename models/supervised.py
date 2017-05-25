@@ -36,9 +36,9 @@ class SupervisedModel(object):
         self.input_shape = input_shape
         self.output_shape = output_shape
         self.dtype = dtype
-        self.is_init = False
         self.optimizer = optimizer
         self._vars = dict()
+        self._init_session = None
 
     @abstractmethod
     def predictor(self, x):
@@ -47,6 +47,10 @@ class SupervisedModel(object):
     @abstractmethod
     def loss_function(self, y_ref, y_pred):
         pass
+
+    @property
+    def is_init(self):
+        return self._init_session is self.session
 
     def __setitem__(self, key, value):
         self._vars[key] = value
@@ -64,22 +68,22 @@ class SupervisedModel(object):
         self['optimization'] = self.optimizer.minimize(self['loss'])
 
     def init(self):
-        self.sess.run(tf.global_variables_initializer())
-        self.is_init = True
+        self.session.run(tf.global_variables_initializer())
+        self._init_session = self.session
 
     @property
-    def sess(self):
+    def session(self):
         return tf.get_default_session()
 
     @_check_init
     def predict(self, x):
         feed_dict = {self['input']: x}
-        return self.sess.run(self['prediction'], feed_dict=feed_dict)
+        return self.session.run(self['prediction'], feed_dict=feed_dict)
 
     @_check_init
     def evaluate(self, x, y):
         feed_dict = {self['input']: x, self['reference']: y}
-        return self.sess.run(self['loss'], feed_dict=feed_dict)
+        return self.session.run(self['loss'], feed_dict=feed_dict)
 
     @_check_init
     def train(self, x, y, epochs=1, batch_size=None):
@@ -92,7 +96,7 @@ class SupervisedModel(object):
             for batch_idx in chunks(indices, batch_size):
                 feed_dict = {self['input']: x[batch_idx],
                              self['reference']: y[batch_idx]}
-                _, loss = self.sess.run([self['optimization'], self['loss']],
+                _, loss = self.session.run([self['optimization'], self['loss']],
                                         feed_dict=feed_dict)
             progress.update(epoch)
 
